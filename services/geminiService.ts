@@ -5,14 +5,45 @@ import { IndustryConfig } from "../constants";
 
 // Lazy initialization - only create client when needed
 let genAI: GoogleGenAI | null = null;
+let currentApiKey: string | null = null;
+
+// Get API key from localStorage or environment
+export function getStoredApiKey(): string | null {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('gemini_api_key');
+  }
+  return null;
+}
+
+// Store API key in localStorage
+export function setApiKey(key: string): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('gemini_api_key', key);
+    // Reset genAI so it uses new key
+    genAI = null;
+    currentApiKey = null;
+  }
+}
+
+// Check if API key is configured
+export function hasApiKey(): boolean {
+  const envKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
+  return !!(envKey || getStoredApiKey());
+}
 
 function getGenAI(): GoogleGenAI {
-  if (!genAI) {
-    const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
-    if (!apiKey) {
-      throw new Error("API_KEY is not set. Please set the API_KEY environment variable.");
-    }
+  const envKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
+  const storedKey = getStoredApiKey();
+  const apiKey = envKey || storedKey;
+  
+  if (!apiKey) {
+    throw new Error("API_KEY_MISSING");
+  }
+  
+  // Reinitialize if key changed
+  if (!genAI || currentApiKey !== apiKey) {
     genAI = new GoogleGenAI({ apiKey });
+    currentApiKey = apiKey;
   }
   return genAI;
 }

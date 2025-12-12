@@ -1,12 +1,13 @@
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AssessmentState, MaturityLevel, LevelDescription } from '../types';
 import { TIMELINE_OPTIONS } from '../constants';
+import { hasApiKey, setApiKey, getStoredApiKey } from '../services/geminiService';
 import clsx from 'clsx';
 import { 
   ArrowRight, CheckCircle2, 
   Clock, Target, ChevronRight, Zap, Info, TrendingUp, DollarSign, Users,
-  BarChart3
+  BarChart3, Key, X
 } from 'lucide-react';
 
 interface StepTargetProps {
@@ -68,6 +69,11 @@ const INDUSTRY_BENCHMARKS: Record<string, { velocity: number; avgMaturity: numbe
 export const StepTarget: React.FC<StepTargetProps> = ({ state, levels, onSetTarget, onSetTimeline, onGenerate, onBack }) => {
   const currentLevel = state.currentLevel || 1;
   const targetLevel = state.targetLevel || Math.min(currentLevel + 2, 5) as MaturityLevel;
+  
+  // API Key modal state
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState(getStoredApiKey() || '');
+  const [apiKeyError, setApiKeyError] = useState('');
   
   // Initialize default target if not set
   useEffect(() => {
@@ -299,7 +305,21 @@ export const StepTarget: React.FC<StepTargetProps> = ({ state, levels, onSetTarg
                                  <div className="flex justify-between items-center border-t border-black/5 pt-2 mt-2"><span className="text-[10px] uppercase opacity-70 font-bold">Avg Peer Velocity</span><span className="font-bold">{benchmark.velocity} lvls/yr</span></div>
                             </div>
                         )}
-                        <button onClick={onGenerate} disabled={state.isGenerating || !state.targetLevel || gap <= 0} className={clsx("w-full py-4 rounded-lg font-bold text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-md", state.isGenerating || gap <= 0 ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#0B1240] text-white hover:bg-blue-900 hover:shadow-lg hover:-translate-y-0.5")}>
+                        
+                        {/* API Key Configuration */}
+                        {!hasApiKey() && (
+                            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                                <p className="text-xs text-amber-800 mb-2 flex items-center gap-1"><Key size={12}/> API Key required for AI report generation</p>
+                                <button onClick={() => setShowApiKeyModal(true)} className="text-xs font-bold text-amber-700 underline hover:text-amber-900">Configure API Key</button>
+                            </div>
+                        )}
+                        {hasApiKey() && (
+                            <div className="mb-4 flex justify-end">
+                                <button onClick={() => setShowApiKeyModal(true)} className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1"><Key size={10}/> Change API Key</button>
+                            </div>
+                        )}
+                        
+                        <button onClick={() => { if (!hasApiKey()) { setShowApiKeyModal(true); } else { onGenerate(); } }} disabled={state.isGenerating || !state.targetLevel || gap <= 0} className={clsx("w-full py-4 rounded-lg font-bold text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-md", state.isGenerating || gap <= 0 ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#0B1240] text-white hover:bg-blue-900 hover:shadow-lg hover:-translate-y-0.5")}>
                             {state.isGenerating ? (<><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>Generating...</>) : (<>Generate Roadmap <ArrowRight size={14}/></>)}
                         </button>
                     </div>
@@ -309,6 +329,48 @@ export const StepTarget: React.FC<StepTargetProps> = ({ state, levels, onSetTarg
         <div className="mt-12 pt-6 border-t border-slate-200 md:hidden">
             <button onClick={onBack} className="text-slate-500 font-medium text-sm flex items-center gap-1"><ChevronRight size={16} className="rotate-180"/> Back to Priorities</button>
         </div>
+        
+        {/* API Key Modal */}
+        {showApiKeyModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2"><Key size={20} className="text-indigo-600"/> Configure API Key</h3>
+                        <button onClick={() => setShowApiKeyModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                    </div>
+                    <p className="text-sm text-slate-600 mb-4">
+                        Enter your Google Gemini API key to enable AI-powered report generation. 
+                        Get your free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">Google AI Studio</a>.
+                    </p>
+                    <input 
+                        type="password" 
+                        value={apiKeyInput} 
+                        onChange={(e) => { setApiKeyInput(e.target.value); setApiKeyError(''); }}
+                        placeholder="Enter your Gemini API key"
+                        className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    {apiKeyError && <p className="text-xs text-red-600 mb-2">{apiKeyError}</p>}
+                    <p className="text-[10px] text-slate-400 mb-4">Your key is stored locally in your browser and never sent to our servers.</p>
+                    <div className="flex gap-3">
+                        <button onClick={() => setShowApiKeyModal(false)} className="flex-1 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                        <button 
+                            onClick={() => {
+                                if (!apiKeyInput.trim()) {
+                                    setApiKeyError('Please enter an API key');
+                                    return;
+                                }
+                                setApiKey(apiKeyInput.trim());
+                                setShowApiKeyModal(false);
+                                onGenerate();
+                            }}
+                            className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700"
+                        >
+                            Save & Generate
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
   );
 };
